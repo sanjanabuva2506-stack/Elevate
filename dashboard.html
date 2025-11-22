@@ -1,0 +1,238 @@
+<!-- app/templates/dashboard.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Strategy Planner Dashboard</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    header {
+      padding: 16px 24px;
+      background: #020617;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .title { font-size: 1.4rem; font-weight: 600; }
+    .sub { font-size: 0.85rem; color: #9ca3af; }
+    main {
+      padding: 16px 24px;
+      display: grid;
+      grid-template-columns: 2fr 1.2fr;
+      gap: 16px;
+    }
+    .card {
+      background: #020617;
+      border-radius: 18px;
+      padding: 16px;
+      border: 1px solid #1f2937;
+      box-shadow: 0 10px 30px rgba(15,23,42,0.7);
+    }
+    .card h2 { margin-top: 0; font-size: 1.05rem; margin-bottom: 8px; }
+
+    .zones {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 10px;
+    }
+    .zone-chip {
+      border-radius: 14px;
+      padding: 10px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      position: relative;
+    }
+    .zone-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .zone-id { font-weight: 600; font-size: 0.9rem; }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .badge-low { background: #022c22; color: #6ee7b7; }
+    .badge-medium { background: #1e293b; color: #eab308; }
+    .badge-high { background: #431407; color: #f97316; }
+    .badge-critical { background: #450a0a; color: #fca5a5; }
+
+    .zone-body {
+      font-size: 0.78rem;
+      color: #9ca3af;
+      line-height: 1.4;
+    }
+    .metric { margin-top: 4px; }
+    .metric span { font-weight: 500; color: #e5e7eb; }
+    .timestamp { font-size: 0.7rem; color: #6b7280; margin-top: 2px; }
+
+    .recommendations {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .rec {
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      font-size: 0.8rem;
+    }
+    .rec-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      font-size: 0.75rem;
+    }
+    .priority-pill {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.7rem;
+    }
+    .priority-low { background: #111827; color: #9ca3af; }
+    .priority-medium { background: #1f2937; color: #facc15; }
+    .priority-high { background: #7c2d12; color: #fed7aa; }
+    .priority-critical { background: #7f1d1d; color: #fecaca; }
+
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 999px;
+      margin-left: 6px;
+      background: #22c55e;
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.6); opacity: 0.3; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .meta { font-size: 0.75rem; color: #6b7280; }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">AI Strategy Planner – Live Command Center</div>
+    <div class="sub">Real-time crowd insights, risk scores, and action suggestions</div>
+  </div>
+  <div class="meta">
+    <span id="last-refresh">Last refresh: —</span>
+    <span class="status-dot"></span>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Zones Overview</h2>
+    <div class="zones" id="zones"></div>
+  </section>
+
+  <section class="card">
+    <h2>Recommended Actions</h2>
+    <div class="recommendations" id="recs"></div>
+  </section>
+</main>
+
+<script>
+  function densityBadgeClass(level) {
+    switch (level) {
+      case "low": return "badge badge-low";
+      case "medium": return "badge badge-medium";
+      case "high": return "badge badge-high";
+      case "critical": return "badge badge-critical";
+      default: return "badge";
+    }
+  }
+  function priorityClass(p) {
+    switch (p) {
+      case "low": return "priority-pill priority-low";
+      case "medium": return "priority-pill priority-medium";
+      case "high": return "priority-pill priority-high";
+      case "critical": return "priority-pill priority-critical";
+      default: return "priority-pill";
+    }
+  }
+  function formatDate(str) {
+    if (!str) return "—";
+    const d = new Date(str);
+    return d.toLocaleTimeString();
+  }
+
+  async function fetchDashboard() {
+    try {
+      const res = await fetch("/dashboard");
+      const data = await res.json();
+      renderZones(data.zones || []);
+      renderRecs(data.recommendations || []);
+      document.getElementById("last-refresh").textContent =
+        "Last refresh: " + new Date().toLocaleTimeString();
+    } catch (e) {
+      console.error("Dashboard fetch failed", e);
+    }
+  }
+
+  function renderZones(zones) {
+    const container = document.getElementById("zones");
+    container.innerHTML = "";
+    if (!zones.length) {
+      container.innerHTML = "<p style='font-size:0.8rem;color:#6b7280'>No zones yet. Send frames or IoT data to see insights.</p>";
+      return;
+    }
+    zones.forEach(z => {
+      const div = document.createElement("div");
+      div.className = "zone-chip";
+      div.innerHTML = `
+        <div class="zone-header">
+          <span class="zone-id">${z.zone_id}</span>
+          <span class="${densityBadgeClass(z.density_level)}">${z.density_level}</span>
+        </div>
+        <div class="zone-body">
+          <div class="metric"><span>People:</span> ${z.estimated_people}</div>
+          <div class="metric"><span>Risk score:</span> ${(z.risk_score * 100).toFixed(0)}%</div>
+          <div class="metric"><span>Temp:</span> ${z.temperature ?? "—"} °C</div>
+          <div class="metric"><span>Queue length:</span> ${z.queue_length ?? "—"}</div>
+          <div class="timestamp">Updated at ${formatDate(z.last_updated)}</div>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  function renderRecs(recs) {
+    const container = document.getElementById("recs");
+    container.innerHTML = "";
+    if (!recs.length) {
+      container.innerHTML = "<p style='font-size:0.8rem;color:#6b7280'>No active recommendations. System is monitoring.</p>";
+      return;
+    }
+    recs.forEach(r => {
+      const div = document.createElement("div");
+      div.className = "rec";
+      div.innerHTML = `
+        <div class="rec-header">
+          <span>${r.zone_id}</span>
+          <span class="${priorityClass(r.priority)}">${r.priority}</span>
+        </div>
+        <div>${r.message}</div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  fetchDashboard();
+  setInterval(fetchDashboard, 3000);
+</script>
+</body>
+</html>
